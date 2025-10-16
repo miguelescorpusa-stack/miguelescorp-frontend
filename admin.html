@@ -27,6 +27,28 @@
         <input type="text" placeholder="Juan Pérez" />
       </label>
       <label>Estado
+        <button id="saveButton">Guardar envío</button>
+<script>
+  document.getElementById("saveButton").addEventListener("click", async () => {
+    const envio = {
+      numero: document.querySelector("input[placeholder='MC-000123']").value,
+      cliente: document.querySelector("input[placeholder='Juan Perez']").value,
+      estado: document.querySelector("input[placeholder='Registro']").value
+    };
+
+    const respuesta = await fetch("https://miguelescorp-backend.vercel.app/api/envios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(envio)
+    });
+
+    if (respuesta.ok) {
+      alert("✅ Envío guardado con éxito");
+    } else {
+      alert("❌ Error al guardar el envío");
+    }
+  });
+</script>
         <input type="text" placeholder="Recogido / En ruta / Entregado" />
       </label>
     </form>
