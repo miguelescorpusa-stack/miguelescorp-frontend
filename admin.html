@@ -19,4 +19,126 @@
     h1{font-size:clamp(22px,4vw,30px); margin:0 0 6px}
     p, label{font-size:clamp(16px,2.6vw,18px)}
     a{color:var(--cta); text-decoration:none; border-bottom:2px solid var(--cta); padding-bottom:1px}
-    a:focus{
+    a:focus{outline:3px solid var(--focus); outline-offset:2px}
+
+    .card{border:2px solid var(--bord); border-radius:14px; padding:18px; margin-top:12px}
+    .row{margin-top:12px}
+    label{display:block; margin-bottom:6px; font-weight:600}
+    input{
+      width:100%; padding:12px 14px; border-radius:12px; border:2px solid var(--bord);
+      font-size:clamp(16px,2.8vw,18px);
+    }
+    input:focus{outline:3px solid var(--focus); border-color:var(--focus)}
+    .hint{color:var(--muted); font-size:14px}
+
+    button{
+      margin-top:16px; padding:12px 18px; border-radius:12px; border:2px solid #000; background:#000; color:#fff;
+      font-weight:700; cursor:pointer; font-size:clamp(16px,2.8vw,18px);
+    }
+    button[disabled]{opacity:.6; cursor:not-allowed}
+    .msg{margin-top:14px; font-weight:700}
+    .ok{color:var(--ok)} .err{color:var(--err)}
+  </style>
+</head>
+<body>
+  <main class="wrap" aria-describedby="page-desc">
+    <p><a href="/index.html" aria-label="Volver al inicio">← Volver al inicio</a></p>
+    <h1>🛠️ Panel Administrativo</h1>
+    <p id="page-desc" class="hint">Registra envíos nuevos. Los datos se envían a <code>https://www.miguelescorp.com/shipments</code>.</p>
+
+    <section class="card" aria-labelledby="sec-form">
+      <h2 id="sec-form" style="margin:0 0 6px">Cargar envío</h2>
+
+      <div class="row">
+        <label for="inpTracking">Número de envío <span class="hint">(tracking_number)</span></label>
+        <input id="inpTracking" name="tracking_number" placeholder="MC-000123" autocomplete="off" />
+      </div>
+
+      <div class="row">
+        <label for="inpCliente">Nombre del cliente <span class="hint">(ref_code)</span></label>
+        <input id="inpCliente" name="ref_code" placeholder="Juan Perez" autocomplete="off" />
+      </div>
+
+      <div class="row">
+        <label for="inpEstado">Estado <span class="hint">(pending | in_transit | delivered)</span></label>
+        <input id="inpEstado" name="status" placeholder="pending" autocomplete="off" />
+      </div>
+
+      <button id="btnGuardar" type="button">Guardar envío</button>
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    // === Config ===
+    const API_BASE = "https://www.miguelescorp.com"; // backend de producción
+
+    // Utilidad accesible para mensajes
+    function setMsg(text, ok=true){
+      const $m = document.getElementById("msg");
+      $m.className = "msg " + (ok ? "ok" : "err");
+      $m.textContent = (ok ? "✅ " : "❌ ") + text;
+    }
+
+    async function guardarEnvio(){
+      const $btn = document.getElementById("btnGuardar");
+      const tracking = document.getElementById("inpTracking").value.trim();
+      const cliente  = document.getElementById("inpCliente").value.trim();
+      const estado   = document.getElementById("inpEstado").value.trim();
+
+      // Validación mínima
+      if(!tracking || !cliente || !estado){
+        setMsg("Completa los tres campos: número, cliente y estado.", false);
+        return;
+      }
+      // Normalizamos valores recomendados
+      const statusNorm = estado.toLowerCase().replace(/\s+/g, "_"); // "in transit" -> "in_transit"
+
+      const payload = {
+        ref_code: cliente,            // usamos el nombre como referencia
+        tracking_number: tracking,    // número de envío
+        status: statusNorm            // pending | in_transit | delivered
+      };
+
+      try{
+        $btn.disabled = true;
+        setMsg("Enviando…");
+
+        const res = await fetch(`${API_BASE}/shipments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if(res.ok){
+          setMsg("Envío registrado con éxito.");
+          // Limpieza
+          document.getElementById("inpTracking").value = "";
+          document.getElementById("inpCliente").value = "";
+          document.getElementById("inpEstado").value = "";
+          console.log("Creado:", data);
+        }else{
+          // Mensaje claro para 404/405/409/500
+          const detail = data?.error || `HTTP ${res.status}`;
+          setMsg(`Error al registrar: ${detail}`, false);
+          console.error("Detalle:", data);
+        }
+      }catch(err){
+        setMsg("No se pudo conectar con el backend.", false);
+        console.error(err);
+      }finally{
+        $btn.disabled = false;
+      }
+    }
+
+    document.getElementById("btnGuardar").addEventListener("click", guardarEnvio);
+
+    // Accesibilidad: Enter para enviar desde el último campo
+    document.getElementById("inpEstado").addEventListener("keydown", e => {
+      if(e.key === "Enter"){ guardarEnvio(); }
+    });
+  </script>
+</body>
+</html>
