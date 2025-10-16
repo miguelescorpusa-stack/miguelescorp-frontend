@@ -1,1 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel Admin — MiguelesCorp</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px}
+    h1{margin-bottom:20px}
+    .card{border:1px solid #ddd;border-radius:12px;padding:20px;margin-bottom:20px}
+    input,button{padding:10px;border-radius:8px;border:1px solid #ccc;width:100%;margin-bottom:10px}
+    button{background:#111;color:#fff;cursor:pointer}
+    label{font-weight:600}
+    pre{background:#fafafa;padding:10px;border-radius:8px;border:1px solid #eee;overflow:auto}
+  </style>
+</head>
+<body>
+  <h1>Panel Admin — MiguelesCorp</h1>
+
+  <div class="card">
+    <h2>Configuración</h2>
+    <label>API Base</label>
+    <input id="apiBase" placeholder="https://miguelescorp-start.vercel.app">
+    <label>Admin Token</label>
+    <input id="adminToken" placeholder="Tu token admin (sin 'Bearer ')">
+    <button onclick="guardarConfig()">Guardar configuración</button>
+    <button onclick="probarBackend()">Probar backend</button>
+    <pre id="salida"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Crear / Actualizar Envío</h2>
+    <label>Ref Code</label><input id="ref">
+    <label>Tracking Number</label><input id="track">
+    <label>Status</label><input id="status" placeholder="in_transit, delivered...">
+    <button onclick="crearEnvio()">Guardar / Upsert</button>
+  </div>
+
+  <div class="card">
+    <h2>Agregar Punto por Dirección</h2>
+    <label>Ref Code</label><input id="refLoc">
+    <label>Dirección</label><input id="dirLoc">
+    <button onclick="addByAddress()">Agregar por dirección</button>
+  </div>
+
+  <script>
+    let base='', token='';
+
+    function guardarConfig(){
+      base = document.getElementById('apiBase').value.trim();
+      token = document.getElementById('adminToken').value.trim();
+      alert('Configuración guardada.');
+    }
+
+    async function probarBackend(){
+      const salida=document.getElementById('salida');
+      try{
+        const r=await fetch(`${base}/health`);
+        const data=await r.json();
+        salida.textContent=JSON.stringify(data,null,2);
+      }catch(e){salida.textContent=e.message;}
+    }
+
+    async function crearEnvio(){
+      const ref=document.getElementById('ref').value.trim();
+      const track=document.getElementById('track').value.trim();
+      const status=document.getElementById('status').value.trim();
+      if(!ref||!track||!status){alert('Completa todos los campos');return;}
+      const salida=document.getElementById('salida');
+      try{
+        const r=await fetch(`${base}/admin/shipments/upsert`,{
+          method:'POST',
+          headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+          body:JSON.stringify({ref_code:ref,tracking_number:track,status})
+        });
+        const data=await r.json();
+        salida.textContent=JSON.stringify(data,null,2);
+      }catch(e){salida.textContent=e.message;}
+    }
+
+    async function addByAddress(){
+      const ref=document.getElementById('refLoc').value.trim();
+      const dir=document.getElementById('dirLoc').value.trim();
+      if(!ref||!dir){alert('Completa ambos campos');return;}
+      const salida=document.getElementById('salida');
+      try{
+        const r=await fetch(`${base}/admin/locations/add-by-address`,{
+          method:'POST',
+          headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+          body:JSON.stringify({ref_code:ref,address:dir})
+        });
+        const data=await r.json();
+        salida.textContent=JSON.stringify(data,null,2);
+      }catch(e){salida.textContent=e.message;}
+    }
+  </script>
+</body>
+</html>
 
