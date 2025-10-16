@@ -91,8 +91,8 @@
         setMsg("Completa los tres campos: número, cliente y estado.", false);
         return;
       }
-      // Normalizamos valores recomendados
-      const statusNorm = estado.toLowerCase().replace(/\s+/g, "_"); // "in transit" -> "in_transit"
+      // Normalizamos valores recomendados (ej. 'in transit' -> 'in_transit')
+      const statusNorm = estado.toLowerCase().replace(/\s+/g, "_");
 
       const payload = {
         ref_code: cliente,            // usamos el nombre como referencia
@@ -120,7 +120,6 @@
           document.getElementById("inpEstado").value = "";
           console.log("Creado:", data);
         }else{
-          // Mensaje claro para 404/405/409/500
           const detail = data?.error || `HTTP ${res.status}`;
           setMsg(`Error al registrar: ${detail}`, false);
           console.error("Detalle:", data);
@@ -134,7 +133,6 @@
     }
 
     document.getElementById("btnGuardar").addEventListener("click", guardarEnvio);
-
     // Accesibilidad: Enter para enviar desde el último campo
     document.getElementById("inpEstado").addEventListener("keydown", e => {
       if(e.key === "Enter"){ guardarEnvio(); }
