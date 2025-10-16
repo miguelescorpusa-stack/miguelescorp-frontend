@@ -1,37 +1,196 @@
-!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin — Migueles Corp</title>
+  <title>Admin MiguelesCorp</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:32px;background:#fff;color:#111}
-    .wrap{max-width:760px;margin:auto}
-    .btn{display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:2px solid #5b22a6}
-    .btn:hover{background:#5b22a6;color:#fff}
-    label{display:block;margin-top:12px}
-    input{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:8px}
+    body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
+    h1{margin-bottom:8px}
+    .muted{color:#666}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}
+    label{display:block;margin:8px 0 4px;font-weight:600}
+    input,select,textarea{padding:8px;border:1px solid #ccc;border-radius:8px;width:100%}
+    button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer;background:#111;color:#fff}
+    .row{display:flex;gap:8px;align-items:center}
+    pre{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:12px;overflow:auto}
+    .ok{color:#0a7b3e}.err{color:#b00020}
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <h1>Panel Administrativo</h1>
-    <a class="btn" h<ref="./index.html">← Volver al Inicio</a>
+  <h1>⚙️ Admin MiguelesCorp</h1>
+  <p class="muted">Crear/actualizar envíos y agregar puntos al mapa.</p>
 
-    <h2 style="margin-top:24px">Cargar envío</h2>
-    <form>
-      <label>Número de envío
-        <input type="text" placeholder="MC-000123" />
-      </label>
-      <label>Nombre del cliente
-        <input type="text" placeholder="Juan Pérez" />
-      </label>
-      <label>Estado
-        <input type="text" placeholder="Recogido / En ruta / Entregado" />
-      </label>
-    </form>
-  </main>
+  <div class="card">
+    <div class="row">
+      <label style="min-width:120px">API Base</label>
+      <input id="api" value="https://miguelescorp-start.vercel.app" />
+      <button onclick="saveCfg()">Guardar</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label style="min-width:120px">Admin Token</label>
+      <input id="tok" type="password" placeholder="mc_admin_..." />
+      <button onclick="testPing()">Probar backend</button>
+    </div>
+    <div id="msg" class="muted" style="margin-top:6px"></div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h3>🧾 Crear/Actualizar envío</h3>
+      <label>Referencia (ref_code)</label>
+      <input id="s_ref" placeholder="ANGEN-001" />
+      <label>Tracking</label>
+      <input id="s_track" placeholder="ANG001US" />
+      <label>Status</label>
+      <select id="s_status">
+        <option value="pending">pending</option>
+        <option value="in_transit" selected>in_transit</option>
+        <option value="delayed">delayed</option>
+        <option value="delivered">delivered</option>
+      </select>
+      <div class="row" style="margin-top:10px">
+        <button onclick="upsertShipment()">Guardar envío</button>
+      </div>
+      <div id="s_out" class="muted" style="margin-top:6px"></div>
+    </section>
+
+    <section class="card">
+      <h3>📍 Agregar ubicación</h3>
+      <label>Ref. del envío (shipment_ref)</label>
+      <input id="l_ref" placeholder="ANGEN-001" />
+
+      <details style="margin-top:8px">
+        <summary><b>Por dirección (geocode)</b></summary>
+        <label>Dirección</label>
+        <textarea id="l_addr" rows="3" placeholder="Ej. 700 Lincoln Rd, Miami Beach, FL"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button onclick="addByAddress()">Agregar por dirección</button>
+        </div>
+      </details>
+
+      <details style="margin-top:8px">
+        <summary><b>O por coordenadas</b></summary>
+        <label>Latitud</label>
+        <input id="l_lat" type="number" step="0.000001" placeholder="25.774000" />
+        <label>Longitud</label>
+        <input id="l_lon" type="number" step="0.000001" placeholder="-80.197000" />
+        <div class="row" style="margin-top:8px">
+          <button onclick="addByLatLon()">Agregar por lat/lon</button>
+        </div>
+      </details>
+
+      <div id="l_out" class="muted" style="margin-top:6px"></div>
+    </section>
+  </div>
+
+  <div class="card">
+    <h3>📦 Ver último estado</h3>
+    <div class="row">
+      <input id="q_ref" placeholder="ANGEN-001" />
+      <button onclick="verTrack()">Consultar</button>
+    </div>
+    <pre id="q_pre" style="margin-top:10px"></pre>
+  </div>
+
+  <script>
+    const el = (id)=>document.getElementById(id);
+    function getCfg(){
+      return {
+        api: el('api').value.trim(),
+        tok: el('tok').value.trim(),
+      }
+    }
+    function saveCfg(){
+      localStorage.setItem('mc_api', el('api').value.trim());
+      localStorage.setItem('mc_tok', el('tok').value.trim());
+      el('msg').textContent = 'Configuración guardada';
+    }
+    (function load(){
+      const a = localStorage.getItem('mc_api'); if(a) el('api').value = a;
+      const t = localStorage.getItem('mc_tok'); if(t) el('tok').value = t;
+    })();
+
+    async function testPing(){
+      const { api, tok } = getCfg();
+      el('msg').textContent = 'Probando...';
+      try{
+        const r = await fetch(`${api}/admin/ping`, { headers: { Authorization: `Bearer ${tok}` }});
+        const j = await r.json();
+        if(r.ok && j.ok){ el('msg').innerHTML = '<span class="ok">OK: backend responde</span>'; }
+        else{ el('msg').innerHTML = '<span class="err">Error: token inválido o backend</span>'; }
+      }catch(e){ el('msg').innerHTML = '<span class="err">Error de red</span>'; }
+    }
+
+    async function upsertShipment(){
+      const { api, tok } = getCfg();
+      const body = {
+        ref_code: el('s_ref').value.trim(),
+        tracking_number: el('s_track').value.trim(),
+        status: el('s_status').value
+      };
+      el('s_out').textContent = 'Enviando...';
+      try{
+        const r = await fetch(`${api}/admin/shipments/upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+          body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        el('s_out').innerHTML = r.ok ? '<span class="ok">Guardado</span>' : `<span class="err">${j.error||'error'}</span>`;
+      }catch(e){ el('s_out').innerHTML = '<span class="err">Error de red</span>'; }
+    }
+
+    async function addByAddress(){
+      const { api, tok } = getCfg();
+      const body = {
+        shipment_ref: el('l_ref').value.trim(),
+        address: el('l_addr').value.trim()
+      };
+      el('l_out').textContent = 'Geocodificando...';
+      try{
+        const r = await fetch(`${api}/admin/locations/add-by-address`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+          body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        el('l_out').innerHTML = r.ok
+          ? `<span class="ok">Punto agregado (${j.lat}, ${j.lon})</span>`
+          : `<span class="err">${j.error||'error'}</span>`;
+      }catch(e){ el('l_out').innerHTML = '<span class="err">Error de red</span>'; }
+    }
+
+    async function addByLatLon(){
+      const { api, tok } = getCfg();
+      const body = {
+        shipment_ref: el('l_ref').value.trim(),
+        lat: +el('l_lat').value,
+        lon: +el('l_lon').value
+      };
+      el('l_out').textContent = 'Enviando...';
+      try{
+        const r = await fetch(`${api}/admin/locations/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+          body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        el('l_out').innerHTML = r.ok ? '<span class="ok">Punto agregado</span>' : `<span class="err">${j.error||'error'}</span>`;
+      }catch(e){ el('l_out').innerHTML = '<span class="err">Error de red</span>'; }
+    }
+
+    async function verTrack(){
+      const { api } = getCfg();
+      const ref = el('q_ref').value.trim();
+      el('q_pre').textContent = 'Consultando...';
+      try{
+        const r = await fetch(`${api}/track/${encodeURIComponent(ref)}`);
+        const j = await r.json();
+        el('q_pre').textContent = JSON.stringify(j, null, 2);
+      }catch(e){ el('q_pre').textContent = 'Error de red'; }
+    }
+  </script>
 </body>
 </html>
-
-
