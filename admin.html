@@ -268,6 +268,23 @@
       // Tu index.html busca por ref_code. Abrimos y rellenamos el campo vía querystring.
       window.location.href = `/index.html?ref=${encodeURIComponent(r)}`;
     };
-  </script>
+  <script>
+function saveToken() {
+  const token = document.getElementById('tokenInput').value.trim();
+  if (token) {
+    localStorage.setItem('adminToken', token);
+    alert('✅ Token guardado correctamente');
+    document.getElementById('tokenStatus').innerText = 'Token activo';
+  } else {
+    alert('Ingresa un token válido');
+  }
+}
+
+function clearToken() {
+  localStorage.removeItem('adminToken');
+  alert('❌ Token eliminado');
+  document.getElementById('tokenStatus').innerText = 'Sin token.';
+}
+</script>
 </body>
 </html>
