@@ -1,57 +1,159 @@
-<script>
-  // === Cargar mapa y marcador de envíos ===
-  async function loadShipment(ref) {
-    const resp = await fetch(`https://www.miguelescorp.com/shipments/${ref}`);
-    const data = await resp.json();
-    const infoDiv = document.getElementById("info");
-    const mapDiv = document.getElementById("map");
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rastreo con Mapa — MiguelesCorp</title>
 
-    if (!data.ok) {
-      infoDiv.innerHTML = `<p style="color:red;">No se encontró el envío: ${ref}</p>`;
-      mapDiv.innerHTML = "";
-      return;
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px}
+    header{margin-bottom:16px}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}
+    label{display:block;margin:8px 0 4px;font-weight:600}
+    input{padding:8px;border:1px solid #ccc;border-radius:8px;width:100%}
+    button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer}
+    .primary{background:#111;color:#fff}
+    #map{height:520px;border-radius:12px;border:1px solid #ddd}
+    .muted{color:#666}
+    ul{margin:6px 0 0 18px}
+    pre{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:12px;overflow:auto}
+    .row{display:flex;gap:8px;margin-top:10px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗺️ Rastreo con Mapa — MiguelesCorp</h1>
+    <p class="muted">Ingresa un código (ej. <b>MIAMI-001</b>). Verás las posiciones más recientes.</p>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <label for="codigo">Código de envío</label>
+      <input id="codigo" placeholder="Ej: MIAMI-001" value="MIAMI-001" />
+      <div class="row">
+        <button class="primary" onclick="buscar()">Buscar</button>
+        <button onclick="listar()">Ver todos</button>
+        <button onclick="probarBackend()">Probar backend</button>
+      </div>
+
+      <div id="panel" style="margin-top:12px" class="muted">Escribe un código y pulsa <b>Buscar</b> o <b>Ver todos</b>.</div>
+
+      <details style="margin-top:14px">
+        <summary>Respuesta cruda</summary>
+        <pre id="raw" hidden></pre>
+      </details>
+
+      <p style="margin-top:14px"><a href="./admin.html">➡️ Ir al panel admin</a></p>
+    </section>
+
+    <section class="card">
+      <div id="map"></div>
+    </section>
+  </div>
+
+  <script>
+    // === CONFIG ===
+    const API_BASE = "https://miguelescorp-start.vercel.app"; // backend en Vercel
+
+    // === MAPA ===
+    let map, markersLayer;
+    function initMap(){
+      // Centro inicial: Miami
+      map = L.map('map').setView([25.7617,-80.1918], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+    }
+    initMap();
+
+    // Helpers UI
+    function pintarLoading(txt='Cargando…'){
+      document.getElementById('panel').innerHTML = `<p class="muted">${txt}</p>`;
+      document.getElementById('raw').hidden = true;
+      markersLayer.clearLayers();
+    }
+    function renderError(err){
+      const msg = err?.message || err || 'Error';
+      document.getElementById('panel').innerHTML = `<p style="color:#b00020">Error: ${msg}</p>`;
+      document.getElementById('raw').hidden = true;
+      markersLayer.clearLayers();
     }
 
-    // Mostrar datos básicos
-    infoDiv.innerHTML = `
-      <strong>${data.shipment.ref_code}</strong> — ${data.shipment.status}<br>
-      <span style="color:gray;">${data.shipment.locations.length} puntos</span>
-    `;
+    // Ver todos los shipments
+    async function listar(){
+      pintarLoading('Cargando envíos…');
+      try{
+        const r = await fetch(`${API_BASE}/shipments`);
+        const data = await r.json();
+        if(!data.ok) throw new Error(data.error || 'Error de API');
 
-    // Crear mapa
-    const map = L.map("map").setView([25.77, -80.19], 12);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    // Colocar los puntos
-    for (const loc of data.shipment.locations) {
-      L.marker([loc.lat, loc.lon]).addTo(map)
-        .bindPopup(`📍 ${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)}`);
+        const items = (data.shipments||[]).map(s=>`
+          <li><b>${s.ref_code}</b> — ${s.tracking_number} — <i>${s.status}</i>
+            <button onclick="ver('${s.ref_code}')">Ver en mapa</button>
+          </li>`).join('');
+        document.getElementById('panel').innerHTML = items ? `<ul>${items}</ul>` : 'Sin envíos.';
+      }catch(e){ renderError(e); }
     }
 
-    // Centrar mapa en el último punto
-    const last = data.shipment.locations[data.shipment.locations.length - 1];
-    if (last) map.setView([last.lat, last.lon], 13);
-  }
+    async function ver(ref){ document.getElementById('codigo').value = ref; await buscar(); }
 
-  // === Detectar parámetro ?ref= ===
-  const params = new URLSearchParams(window.location.search);
-  const refFromUrl = params.get("ref");
+    // Buscar un envío y pintar puntos
+    async function buscar(){
+      const codigo = document.getElementById('codigo').value.trim();
+      if(!codigo){ alert('Escribe un código'); return; }
+      pintarLoading('Buscando…');
 
-  const searchInput = document.getElementById("shipment_ref");
-  const searchBtn = document.getElementById("searchBtn");
+      try{
+        const r = await fetch(`${API_BASE}/track/${encodeURIComponent(codigo)}`);
+        const data = await r.json();
+        if(!data.ok) throw new Error(data.error || 'Error de API');
 
-  // Si hay ref en URL, buscar automáticamente
-  if (refFromUrl) {
-    searchInput.value = refFromUrl;
-    loadShipment(refFromUrl);
-  }
+        const s = data.shipment;
+        const locs = data.locations || [];
 
-  // Buscar manualmente con botón
-  searchBtn.onclick = () => {
-    const ref = searchInput.value.trim();
-    if (ref) loadShipment(ref);
-  };
-</script>
+        document.getElementById('panel').innerHTML = `
+          <p><b>${s.ref_code}</b> — ${s.tracking_number} — <i>${s.status}</i></p>
+          <p class="muted">Puntos: ${locs.length}</p>
+        `;
+
+        markersLayer.clearLayers();
+        if(locs.length){
+          const bounds = [];
+          locs.forEach(l=>{
+            const lat = +l.lat, lon = +l.lon;
+            const m = L.marker([lat, lon]).addTo(markersLayer);
+            m.bindPopup(`<b>${s.ref_code}</b><br>${new Date(l.ts).toLocaleString()}<br>(${lat}, ${lon})`);
+            bounds.push([lat, lon]);
+          });
+          if(bounds.length === 1) map.setView(bounds[0], 14);
+          else map.fitBounds(bounds, {padding:[20,20]});
+        }
+
+        const pre = document.getElementById('raw');
+        pre.textContent = JSON.stringify(data, null, 2);
+        pre.hidden = false;
+      }catch(e){ renderError(e); }
+    }
+
+    // Ping de backend
+    async function probarBackend(){
+      pintarLoading('Probando backend…');
+      try{
+        const r = await fetch(`${API_BASE}/health`);
+        const data = await r.json();
+        document.getElementById('panel').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        const pre = document.getElementById('raw');
+        pre.textContent = JSON.stringify(data, null, 2);
+        pre.hidden = false;
+      }catch(e){ renderError(e); }
+    }
+  </script>
+</body>
+</html>
+
