@@ -1,142 +1,273 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Panel Administrativo — Migueles Corp</title>
-  <meta name="color-scheme" content="light dark" />
+  <title>Panel Administrativo — MiguelesCorp</title>
   <style>
-    :root{
-      --bg:#ffffff; --fg:#111111; --muted:#666; --ok:#0a7; --err:#b00; --cta:#111;
-      --bord:#ddd; --focus:#000;
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; line-height: 1.4; }
+    h1, h2 { margin: 0 0 8px; }
+    .muted { color: #666; font-size: 0.95rem; }
+    .card { border: 2px solid #222; border-radius: 12px; padding: 16px; margin: 18px 0; max-width: 760px; }
+    label { display:block; margin: 10px 0 4px; font-weight: 600; }
+    input, select, button, textarea {
+      width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #222; font-size: 16px;
+      background: #fff; color:#000;
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
-      background:var(--bg); color:var(--fg); line-height:1.5;
-    }
-    .wrap{max-width:780px; margin:32px auto; padding:0 16px}
-    h1{font-size:clamp(22px,4vw,30px); margin:0 0 6px}
-    p, label{font-size:clamp(16px,2.6vw,18px)}
-    a{color:var(--cta); text-decoration:none; border-bottom:2px solid var(--cta); padding-bottom:1px}
-    a:focus{outline:3px solid var(--focus); outline-offset:2px}
-
-    .card{border:2px solid var(--bord); border-radius:14px; padding:18px; margin-top:12px}
-    .row{margin-top:12px}
-    label{display:block; margin-bottom:6px; font-weight:600}
-    input{
-      width:100%; padding:12px 14px; border-radius:12px; border:2px solid var(--bord);
-      font-size:clamp(16px,2.8vw,18px);
-    }
-    input:focus{outline:3px solid var(--focus); border-color:var(--focus)}
-    .hint{color:var(--muted); font-size:14px}
-
-    button{
-      margin-top:16px; padding:12px 18px; border-radius:12px; border:2px solid #000; background:#000; color:#fff;
-      font-weight:700; cursor:pointer; font-size:clamp(16px,2.8vw,18px);
-    }
-    button[disabled]{opacity:.6; cursor:not-allowed}
-    .msg{margin-top:14px; font-weight:700}
-    .ok{color:var(--ok)} .err{color:var(--err)}
+    button { width: auto; background:#000; color:#fff; cursor:pointer; margin-top: 12px; }
+    button.secondary { background:#fff; color:#000; border:2px solid #000; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .ok { color: #0a7a0a; font-weight:700; }
+    .err { color: #b00020; font-weight:700; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95rem; }
+    details { margin-top: 10px; }
+    a { color:#3b5ed7; }
   </style>
 </head>
 <body>
-  <main class="wrap" aria-describedby="page-desc">
-    <p><a href="/index.html" aria-label="Volver al inicio">← Volver al inicio</a></p>
-    <h1>🛠️ Panel Administrativo</h1>
-    <p id="page-desc" class="hint">Registra envíos nuevos. Los datos se envían a <code>https://www.miguelescorp.com/shipments</code>.</p>
+  <a href="/index.html">← Volver al mapa</a>
+  <h1>🛠️ Panel Administrativo</h1>
+  <p class="muted">Carga, actualiza y geolocaliza envíos. El token admin se guarda localmente en tu navegador (no en el código).</p>
 
-    <section class="card" aria-labelledby="sec-form">
-      <h2 id="sec-form" style="margin:0 0 6px">Cargar envío</h2>
-
-      <div class="row">
-        <label for="inpTracking">Número de envío <span class="hint">(tracking_number)</span></label>
-        <input id="inpTracking" name="tracking_number" placeholder="MC-000123" autocomplete="off" />
+  <!-- Configurar token -->
+  <div class="card" aria-labelledby="cfgTitle">
+    <h2 id="cfgTitle">Configurar Token Admin</h2>
+    <p class="muted">Necesario para los endpoints <span class="mono">/admin/*</span>.</p>
+    <div class="row">
+      <div>
+        <label for="token">Token</label>
+        <input id="token" type="password" placeholder="mc_admin_..." />
       </div>
-
-      <div class="row">
-        <label for="inpCliente">Nombre del cliente <span class="hint">(ref_code)</span></label>
-        <input id="inpCliente" name="ref_code" placeholder="Juan Perez" autocomplete="off" />
+      <div style="align-self:end">
+        <button id="saveTokenBtn">Guardar token</button>
+        <button class="secondary" id="clearTokenBtn">Borrar token</button>
       </div>
+    </div>
+    <p id="tokenStatus" class="muted"></p>
+  </div>
 
-      <div class="row">
-        <label for="inpEstado">Estado <span class="hint">(pending | in_transit | delivered)</span></label>
-        <input id="inpEstado" name="status" placeholder="pending" autocomplete="off" />
+  <!-- Crear/actualizar envío -->
+  <div class="card" aria-labelledby="envioTitle">
+    <h2 id="envioTitle">Crear / Actualizar envío</h2>
+    <p class="muted">Usa el endpoint público <span class="mono">POST /shipments</span> (no requiere token). Crea el envío con dirección destino.</p>
+
+    <label for="ref_code">Nombre del cliente (ref_code)</label>
+    <input id="ref_code" placeholder="Ej. CLIENTE-DE-PRUEBA" />
+
+    <label for="status">Estado</label>
+    <select id="status">
+      <option value="pending">pending</option>
+      <option value="in_transit" selected>in_transit</option>
+      <option value="delivered">delivered</option>
+    </select>
+
+    <label for="dest_addr">Dirección destino</label>
+    <input id="dest_addr" placeholder="Ej. 1015 N America Way, Miami, FL 33132" />
+
+    <button id="saveShipmentBtn">Guardar envío</button>
+    <p id="shipmentMsg"></p>
+
+    <details>
+      <summary>Respuesta cruda</summary>
+      <pre id="shipmentRaw" class="mono"></pre>
+    </details>
+  </div>
+
+  <!-- Agregar ubicación por dirección -->
+  <div class="card" aria-labelledby="addrTitle">
+    <h2 id="addrTitle">Agregar ubicación — por dirección</h2>
+    <p class="muted">Endpoint protegido <span class="mono">POST /admin/locations/add-by-address</span> (usa tu token).</p>
+
+    <label for="ref_code_addr">Código de envío (ref_code)</label>
+    <input id="ref_code_addr" placeholder="Ej. CLIENTE-DE-PRUEBA" />
+
+    <label for="addr_text">Dirección</label>
+    <input id="addr_text" placeholder="Ej. Brickell City Centre, Miami, FL" />
+
+    <button id="addByAddressBtn">Agregar punto</button>
+    <p id="addrMsg"></p>
+
+    <details>
+      <summary>Respuesta cruda</summary>
+      <pre id="addrRaw" class="mono"></pre>
+    </details>
+  </div>
+
+  <!-- Agregar ubicación por coordenadas -->
+  <div class="card" aria-labelledby="coordTitle">
+    <h2 id="coordTitle">Agregar ubicación — por coordenadas</h2>
+    <p class="muted">Endpoint protegido <span class="mono">POST /admin/locations/add</span> (usa tu token).</p>
+
+    <label for="ref_code_xy">Código de envío (ref_code)</label>
+    <input id="ref_code_xy" placeholder="Ej. CLIENTE-DE-PRUEBA" />
+
+    <div class="row">
+      <div>
+        <label for="lat">Latitud</label>
+        <input id="lat" type="number" step="0.000001" placeholder="25.7674" />
       </div>
+      <div>
+        <label for="lon">Longitud</label>
+        <input id="lon" type="number" step="0.000001" placeholder="-80.1936" />
+      </div>
+    </div>
 
-      <button id="btnGuardar" type="button">Guardar envío</button>
-      <div id="msg" class="msg" role="status" aria-live="polite"></div>
-    </section>
-  </main>
+    <button id="addByCoordsBtn">Agregar punto</button>
+    <p id="coordsMsg"></p>
+
+    <details>
+      <summary>Respuesta cruda</summary>
+      <pre id="coordsRaw" class="mono"></pre>
+    </details>
+  </div>
+
+  <!-- Acceso rápido al mapa -->
+  <div class="card">
+    <h2>Ver en mapa</h2>
+    <div class="row">
+      <div>
+        <label for="ref_view">Código de envío (ref_code)</label>
+        <input id="ref_view" placeholder="Ej. CLIENTE-DE-PRUEBA" />
+      </div>
+      <div style="align-self:end">
+        <button id="viewOnMapBtn">Ver envío en mapa</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    // === Config ===
-    const API_BASE = "https://www.miguelescorp.com"; // backend de producción
+    const API_BASE = 'https://www.miguelescorp.com';
 
-    // Utilidad accesible para mensajes
-    function setMsg(text, ok=true){
-      const $m = document.getElementById("msg");
-      $m.className = "msg " + (ok ? "ok" : "err");
-      $m.textContent = (ok ? "✅ " : "❌ ") + text;
+    // ===== Token admin (localStorage) =====
+    const tokenInput = document.getElementById('token');
+    const tokenStatus = document.getElementById('tokenStatus');
+    const saveTokenBtn = document.getElementById('saveTokenBtn');
+    const clearTokenBtn = document.getElementById('clearTokenBtn');
+
+    function getToken() { return localStorage.getItem('mc_admin_token') || ''; }
+    function setToken(t) { localStorage.setItem('mc_admin_token', t || ''); }
+    function updateTokenUI() {
+      const t = getToken();
+      tokenInput.value = t;
+      tokenStatus.textContent = t ? 'Token guardado en este navegador.' : 'Sin token.';
+    }
+    saveTokenBtn.onclick = () => { setToken(tokenInput.value.trim()); updateTokenUI(); };
+    clearTokenBtn.onclick = () => { setToken(''); updateTokenUI(); };
+    updateTokenUI();
+
+    // ===== Helpers =====
+    async function postJSON(path, body, needsAuth=false) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (needsAuth) {
+        const t = getToken();
+        if (!t) throw new Error('Falta token admin. Configúralo arriba.');
+        headers['Authorization'] = 'Bearer ' + t;
+      }
+      const r = await fetch(API_BASE + path, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+      });
+      const txt = await r.text();
+      let data = null;
+      try { data = JSON.parse(txt); } catch { /* html error */ }
+      if (!r.ok) {
+        const msg = data?.error || ('http_error_' + r.status);
+        throw new Error(msg + ' — ' + txt);
+      }
+      return { data, raw: txt };
     }
 
-    async function guardarEnvio(){
-      const $btn = document.getElementById("btnGuardar");
-      const tracking = document.getElementById("inpTracking").value.trim();
-      const cliente  = document.getElementById("inpCliente").value.trim();
-      const estado   = document.getElementById("inpEstado").value.trim();
+    // ===== Crear/actualizar envío (público) =====
+    const refInput = document.getElementById('ref_code');
+    const statusSel = document.getElementById('status');
+    const destInput = document.getElementById('dest_addr');
+    const saveShipmentBtn = document.getElementById('saveShipmentBtn');
+    const shipmentMsg = document.getElementById('shipmentMsg');
+    const shipmentRaw = document.getElementById('shipmentRaw');
 
-      // Validación mínima
-      if(!tracking || !cliente || !estado){
-        setMsg("Completa los tres campos: número, cliente y estado.", false);
-        return;
-      }
-      // Normalizamos valores recomendados (ej. 'in transit' -> 'in_transit')
-      const statusNorm = estado.toLowerCase().replace(/\s+/g, "_");
-
-      const payload = {
-        ref_code: cliente,            // usamos el nombre como referencia
-        tracking_number: tracking,    // número de envío
-        status: statusNorm            // pending | in_transit | delivered
-      };
-
-      try{
-        $btn.disabled = true;
-        setMsg("Enviando…");
-
-        const res = await fetch(`${API_BASE}/shipments`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if(res.ok){
-          setMsg("Envío registrado con éxito.");
-          // Limpieza
-          document.getElementById("inpTracking").value = "";
-          document.getElementById("inpCliente").value = "";
-          document.getElementById("inpEstado").value = "";
-          console.log("Creado:", data);
-        }else{
-          const detail = data?.error || `HTTP ${res.status}`;
-          setMsg(`Error al registrar: ${detail}`, false);
-          console.error("Detalle:", data);
+    saveShipmentBtn.onclick = async () => {
+      shipmentMsg.textContent = '';
+      shipmentRaw.textContent = '';
+      try {
+        const body = {
+          ref_code: (refInput.value || '').trim(),
+          status: (statusSel.value || '').trim(),
+          destination_address: (destInput.value || '').trim()
+        };
+        if (!body.ref_code || !body.status || !body.destination_address) {
+          throw new Error('missing_fields');
         }
-      }catch(err){
-        setMsg("No se pudo conectar con el backend.", false);
-        console.error(err);
-      }finally{
-        $btn.disabled = false;
+        const { data, raw } = await postJSON('/shipments', body, false);
+        shipmentMsg.innerHTML = `<span class="ok">✔ Envío guardado</span>`;
+        shipmentRaw.textContent = raw;
+      } catch (err) {
+        shipmentMsg.innerHTML = `<span class="err">✖ Error: ${err.message}</span>`;
       }
-    }
+    };
 
-    document.getElementById("btnGuardar").addEventListener("click", guardarEnvio);
-    // Accesibilidad: Enter para enviar desde el último campo
-    document.getElementById("inpEstado").addEventListener("keydown", e => {
-      if(e.key === "Enter"){ guardarEnvio(); }
-    });
+    // ===== Agregar por dirección (admin) =====
+    const refAddr = document.getElementById('ref_code_addr');
+    const addrText = document.getElementById('addr_text');
+    const addByAddressBtn = document.getElementById('addByAddressBtn');
+    const addrMsg = document.getElementById('addrMsg');
+    const addrRaw = document.getElementById('addrRaw');
+
+    addByAddressBtn.onclick = async () => {
+      addrMsg.textContent = '';
+      addrRaw.textContent = '';
+      try {
+        const body = {
+          shipment_ref: (refAddr.value || '').trim(),
+          address: (addrText.value || '').trim()
+        };
+        if (!body.shipment_ref || !body.address) {
+          throw new Error('missing_fields');
+        }
+        const { data, raw } = await postJSON('/admin/locations/add-by-address', body, true);
+        addrMsg.innerHTML = `<span class="ok">✔ Punto agregado</span> (lat: ${data.lat}, lon: ${data.lon})`;
+        addrRaw.textContent = raw;
+      } catch (err) {
+        addrMsg.innerHTML = `<span class="err">✖ Error: ${err.message}</span>`;
+      }
+    };
+
+    // ===== Agregar por coordenadas (admin) =====
+    const refXY = document.getElementById('ref_code_xy');
+    const latInput = document.getElementById('lat');
+    const lonInput = document.getElementById('lon');
+    const addByCoordsBtn = document.getElementById('addByCoordsBtn');
+    const coordsMsg = document.getElementById('coordsMsg');
+    const coordsRaw = document.getElementById('coordsRaw');
+
+    addByCoordsBtn.onclick = async () => {
+      coordsMsg.textContent = '';
+      coordsRaw.textContent = '';
+      try {
+        const body = {
+          shipment_ref: (refXY.value || '').trim(),
+          lat: Number(latInput.value),
+          lon: Number(lonInput.value)
+        };
+        if (!body.shipment_ref || Number.isNaN(body.lat) || Number.isNaN(body.lon)) {
+          throw new Error('missing_fields');
+        }
+        const { raw } = await postJSON('/admin/locations/add', body, true);
+        coordsMsg.innerHTML = `<span class="ok">✔ Punto agregado</span>`;
+        coordsRaw.textContent = raw;
+      } catch (err) {
+        coordsMsg.innerHTML = `<span class="err">✖ Error: ${err.message}</span>`;
+      }
+    };
+
+    // ===== Ver en mapa =====
+    document.getElementById('viewOnMapBtn').onclick = () => {
+      const r = (document.getElementById('ref_view').value || '').trim();
+      if (!r) { alert('Ingresa ref_code'); return; }
+      // Tu index.html busca por ref_code. Abrimos y rellenamos el campo vía querystring.
+      window.location.href = `/index.html?ref=${encodeURIComponent(r)}`;
+    };
   </script>
 </body>
 </html>
